@@ -1,0 +1,23 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: oci-mcp-role
+  namespace: oci-mcp
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: oci-mcp-rolebinding
+  namespace: oci-mcp
+subjects:
+  - kind: ServiceAccount
+    name: oci-mcp-sa
+    namespace: oci-mcp
+roleRef:
+  kind: Role
+  name: oci-mcp-role
+  apiGroup: rbac.authorization.k8s.io

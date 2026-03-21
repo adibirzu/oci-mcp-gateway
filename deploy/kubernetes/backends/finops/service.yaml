@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: finopsai-mcp
+  namespace: oci-mcp
+  labels:
+    app: finopsai-mcp
+    tier: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: finopsai-mcp
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http

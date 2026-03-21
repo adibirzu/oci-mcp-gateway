@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oci-mcp-gateway
+  namespace: oci-mcp
+  labels:
+    app: oci-mcp-gateway
+    tier: gateway
+    app.kubernetes.io/part-of: oci-mcp-gateway
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: oci-mcp-gateway
+  template:
+    metadata:
+      labels:
+        app: oci-mcp-gateway
+        tier: gateway
+    spec:
+      serviceAccountName: oci-mcp-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: oci-mcp-gateway
+      containers:
+        - name: gateway
+          image: eu-frankfurt-1.ocir.io/${OCIR_TENANCY}/oci-mcp-gateway:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 9000
+              name: http
+          env:
+            - name: MCP_GATEWAY_CONFIG
+              value: "/app/config/gateway.json"
+            - name: MCP_GATEWAY_HOST
+              value: "0.0.0.0"
+            - name: MCP_GATEWAY_PORT
+              value: "9000"
+            - name: OCI_AUTH_METHOD
+              value: "resource_principal"
+            - name: OCI_REGION
+              value: "eu-frankfurt-1"
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+            - name: secrets
+              mountPath: /etc/mcp-gateway
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 500m
+            limits:
+              memory: 1Gi
+              cpu: "1"
+      volumes:
+        - name: config
+          configMap:
+            name: oci-mcp-gateway-config
+        - name: secrets
+          secret:
+            secretName: oci-mcp-gateway-secrets
+            items:
+              - key: jwt-public-key.pem
+                path: jwt-public-key.pem
+      imagePullSecrets:
+        - name: ocir-pull-secret

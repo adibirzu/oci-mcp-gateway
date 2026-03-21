@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-oci
+  namespace: oci-mcp
+  labels:
+    app: mcp-oci
+    tier: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: mcp-oci
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http

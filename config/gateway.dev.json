@@ -1,0 +1,96 @@
+{
+  "name": "oci-mcp-gateway-dev",
+  "version": "1.0.0",
+  "host": "127.0.0.1",
+  "port": 9000,
+  "path": "/mcp",
+  "log_level": "DEBUG",
+  "stateless": false,
+
+  "auth": {
+    "enabled": true,
+    "static_tokens": {
+      "dev-token-001": {
+        "client_id": "dev-agent",
+        "scopes": ["read:tools", "write:tools", "admin:gateway"]
+      }
+    },
+    "cors_origins": ["*"]
+  },
+
+  "backends": [
+    {
+      "name": "logan",
+      "description": "OCI Logging Analytics (local stdio)",
+      "transport": "stdio",
+      "command": "python",
+      "args": ["-m", "mcp_logan.server"],
+      "cwd": "../../mcp-oci-logan-server",
+      "pythonpath": ["../../mcp-oci-logan-server/src"],
+      "auth_method": "oci_config",
+      "oci_profile": "DEFAULT",
+      "namespace_tools": true,
+      "health_check_interval": 60,
+      "tags": ["oci", "dev"]
+    },
+    {
+      "name": "oci",
+      "description": "OCI Infrastructure (local stdio)",
+      "transport": "stdio",
+      "command": "python",
+      "args": ["-m", "mcp_server_oci.server"],
+      "cwd": "../mcp-oci",
+      "pythonpath": ["../mcp-oci/src"],
+      "auth_method": "oci_config",
+      "oci_profile": "DEFAULT",
+      "namespace_tools": true,
+      "health_check_interval": 60,
+      "tags": ["oci", "dev"]
+    },
+    {
+      "name": "security",
+      "description": "OCI Security (local stdio)",
+      "transport": "stdio",
+      "command": "python",
+      "args": ["-m", "oci_mcp_security.server"],
+      "cwd": "../oci-mcp-security",
+      "pythonpath": ["../oci-mcp-security/src"],
+      "auth_method": "oci_config",
+      "oci_profile": "DEFAULT",
+      "namespace_tools": true,
+      "health_check_interval": 60,
+      "tags": ["oci", "dev"]
+    },
+    {
+      "name": "finops",
+      "description": "Multicloud FinOps (local stdio)",
+      "transport": "stdio",
+      "command": "python",
+      "args": ["-m", "finopsai_mcp.server"],
+      "cwd": "../finopsai-mcp",
+      "pythonpath": ["../finopsai-mcp/src"],
+      "auth_method": "oci_config",
+      "oci_profile": "DEFAULT",
+      "namespace_tools": true,
+      "health_check_interval": 60,
+      "tags": ["oci", "dev"]
+    },
+    {
+      "name": "dbobs",
+      "description": "Database Observatory (local stdio)",
+      "transport": "stdio",
+      "command": "python",
+      "args": ["-m", "src.main"],
+      "cwd": "../mcp-oci-database-observatory",
+      "pythonpath": ["../mcp-oci-database-observatory"],
+      "auth_method": "oci_config",
+      "oci_profile": "DEFAULT",
+      "namespace_tools": true,
+      "health_check_interval": 60,
+      "tags": ["oci", "dev"]
+    }
+  ],
+
+  "enable_audit_log": true,
+  "enable_metrics": false
+}

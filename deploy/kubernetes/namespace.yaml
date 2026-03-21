@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: oci-mcp
+  labels:
+    app.kubernetes.io/part-of: oci-mcp-gateway
+    purpose: mcp-servers

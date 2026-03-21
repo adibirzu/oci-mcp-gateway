@@ -1,0 +1,38 @@
+# Only the gateway pod can reach backend pods on port 8000.
+# Backend pods cannot talk to each other.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-ingress
+  namespace: oci-mcp
+spec:
+  podSelector:
+    matchLabels:
+      tier: backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: oci-mcp-gateway
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+# Gateway accepts traffic from the LoadBalancer on port 9000
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-ingress
+  namespace: oci-mcp
+spec:
+  podSelector:
+    matchLabels:
+      app: oci-mcp-gateway
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 9000

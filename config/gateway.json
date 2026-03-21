@@ -1,0 +1,90 @@
+{
+  "name": "oci-mcp-gateway",
+  "version": "1.0.0",
+  "host": "0.0.0.0",
+  "port": 9000,
+  "path": "/mcp",
+  "log_level": "INFO",
+  "stateless": true,
+
+  "auth": {
+    "enabled": true,
+    "jwt_public_key_file": "/etc/mcp-gateway/jwt-public-key.pem",
+    "jwt_issuer": "https://idcs-${IDCS_DOMAIN_ID}.identity.oraclecloud.com/oauth2/v1",
+    "jwt_audience": "oci-mcp-gateway",
+    "jwt_algorithms": ["RS256"],
+    "static_tokens": {},
+    "required_scopes": [],
+    "tool_scopes": {},
+    "cors_origins": [
+      "https://cp.octodemo.cloud",
+      "https://ops.octodemo.cloud"
+    ]
+  },
+
+  "backends": [
+    {
+      "name": "logan",
+      "description": "OCI Logging Analytics — security operations, threat hunting, compliance",
+      "transport": "streamable_http",
+      "url": "http://oci-logan.oci-mcp.svc.cluster.local:8000/mcp",
+      "auth_method": "resource_principal",
+      "namespace_tools": true,
+      "health_check_interval": 30,
+      "connect_timeout": 10.0,
+      "request_timeout": 60.0,
+      "tags": ["oci", "security", "logging"]
+    },
+    {
+      "name": "oci",
+      "description": "OCI Infrastructure — compute, networking, identity, storage",
+      "transport": "streamable_http",
+      "url": "http://mcp-oci.oci-mcp.svc.cluster.local:8000/mcp",
+      "auth_method": "resource_principal",
+      "namespace_tools": true,
+      "health_check_interval": 30,
+      "connect_timeout": 10.0,
+      "request_timeout": 60.0,
+      "tags": ["oci", "infrastructure"]
+    },
+    {
+      "name": "security",
+      "description": "OCI Security — Cloud Guard, VSS, WAF, Bastion, Data Safe",
+      "transport": "streamable_http",
+      "url": "http://oci-mcp-security.oci-mcp.svc.cluster.local:8000/mcp",
+      "auth_method": "resource_principal",
+      "namespace_tools": true,
+      "health_check_interval": 30,
+      "connect_timeout": 10.0,
+      "request_timeout": 60.0,
+      "tags": ["oci", "security"]
+    },
+    {
+      "name": "finops",
+      "description": "Multicloud FinOps — cost analysis, anomaly detection, rightsizing",
+      "transport": "streamable_http",
+      "url": "http://finopsai-mcp.oci-mcp.svc.cluster.local:8000/mcp",
+      "auth_method": "resource_principal",
+      "namespace_tools": true,
+      "health_check_interval": 30,
+      "connect_timeout": 10.0,
+      "request_timeout": 60.0,
+      "tags": ["oci", "finops", "multicloud"]
+    },
+    {
+      "name": "dbobs",
+      "description": "Database Observatory — Oracle, MySQL, PostgreSQL observability",
+      "transport": "streamable_http",
+      "url": "http://db-observatory.oci-mcp.svc.cluster.local:8000/mcp",
+      "auth_method": "resource_principal",
+      "namespace_tools": true,
+      "health_check_interval": 30,
+      "connect_timeout": 10.0,
+      "request_timeout": 60.0,
+      "tags": ["oci", "database", "observability"]
+    }
+  ],
+
+  "enable_audit_log": true,
+  "enable_metrics": true
+}

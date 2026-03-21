@@ -1,0 +1,32 @@
+[project]
+name = "oci-mcp-gateway"
+version = "1.0.0"
+description = "Centralized OKE gateway for OCI MCP servers — wraps mcp-server-oci gateway module"
+requires-python = ">=3.12"
+license = "MIT"
+
+dependencies = [
+    "mcp-server-oci>=2.0.0",
+    "structlog>=24.0.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.0.0",
+    "httpx>=0.27.0",
+]
+
+[project.optional-dependencies]
+otel = [
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.20.0",
+    "opentelemetry-instrumentation-httpx>=0.49b0",
+]
+
+[project.scripts]
+oci-mcp-gateway = "oci_mcp_gateway.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/oci_mcp_gateway"]
