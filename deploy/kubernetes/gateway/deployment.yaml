@@ -55,6 +55,12 @@ spec:
               value: "instance_principal"
             - name: OCI_REGION
               value: "eu-frankfurt-1"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "https://${APM_UPLOAD_ENDPOINT}"
+            - name: OCI_APM_DATA_KEY
+              value: "QEJQEAIZ5IGZ27P5NJ7ZBGJF4QQAHB33"
+            - name: OTEL_SERVICE_NAME
+              value: "oci-mcp-gateway"
           volumeMounts:
             - name: config
               mountPath: /app/config

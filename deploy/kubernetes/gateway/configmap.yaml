@@ -16,11 +16,21 @@ data:
       "log_level": "INFO",
       "stateless": false,
       "auth": {
-        "enabled": false,
-        "static_tokens": {},
+        "enabled": true,
+        "jwt_public_key_file": "/etc/mcp-gateway/jwt-public-key.pem",
+        "jwt_issuer": "https://identity.oraclecloud.com/",
+        "jwt_audience": "oci-mcp-gateway",
+        "jwt_algorithms": ["RS256"],
+        "static_tokens": {
+          "NMcC8kFbYZbQykT82V4NQPikvma1TuoCto9Acd8en2Y": {
+            "client_id": "oci-demo-genai",
+            "scopes": ["read:tools", "write:tools"],
+            "subject": "control-plane"
+          }
+        },
         "required_scopes": [],
         "tool_scopes": {},
-        "cors_origins": ["*"]
+        "cors_origins": ["https://cp.octodemo.cloud", "https://ops.octodemo.cloud", "*"]
       },
       "backends": [
         {
