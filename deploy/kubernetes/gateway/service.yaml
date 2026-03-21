@@ -11,11 +11,19 @@ metadata:
     service.beta.kubernetes.io/oci-load-balancer-shape-flex-min: "10"
     service.beta.kubernetes.io/oci-load-balancer-shape-flex-max: "10"
     service.beta.kubernetes.io/oci-load-balancer-subnet1: "${GATEWAY_LB_SUBNET_OCID}"
+    service.beta.kubernetes.io/oci-load-balancer-ssl-ports: "443"
+    service.beta.kubernetes.io/oci-load-balancer-tls-secret: "mcp-gateway-tls"
+    service.beta.kubernetes.io/oci-load-balancer-backend-protocol: "HTTP"
 spec:
   type: LoadBalancer
+  sessionAffinity: None
   selector:
     app: oci-mcp-gateway
   ports:
+    - port: 443
+      targetPort: 9000
+      protocol: TCP
+      name: https
     - port: 80
       targetPort: 9000
       protocol: TCP
