@@ -39,6 +39,11 @@ spec:
         - name: gateway
           image: eu-frankfurt-1.ocir.io/${OCIR_TENANCY}/oci-mcp-gateway:latest
           imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
           ports:
             - containerPort: 9000
               name: http
@@ -55,10 +60,18 @@ spec:
               value: "instance_principal"
             - name: OCI_REGION
               value: "eu-frankfurt-1"
+            - name: MCP_GATEWAY_STATIC_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: oci-mcp-gateway-secrets
+                  key: static-token
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "https://${APM_UPLOAD_ENDPOINT}"
             - name: OCI_APM_DATA_KEY
-              value: "QEJQEAIZ5IGZ27P5NJ7ZBGJF4QQAHB33"
+              valueFrom:
+                secretKeyRef:
+                  name: oci-mcp-gateway-secrets
+                  key: apm-data-key
             - name: OTEL_SERVICE_NAME
               value: "oci-mcp-gateway"
           volumeMounts:

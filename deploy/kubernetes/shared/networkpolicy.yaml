@@ -20,6 +20,38 @@ spec:
         - protocol: TCP
           port: 8000
 ---
+# Backend pods: restrict egress to DNS + OCI API endpoints only.
+# Prevents compromised backends from reaching arbitrary hosts.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-egress
+  namespace: oci-mcp
+spec:
+  podSelector:
+    matchLabels:
+      tier: backend
+  policyTypes:
+    - Egress
+  egress:
+    # DNS resolution (kube-dns)
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # OCI API endpoints (HTTPS)
+    - ports:
+        - protocol: TCP
+          port: 443
+    # OCI IMDS (instance metadata for instance principal auth)
+    - to:
+        - ipBlock:
+            cidr: 169.254.169.254/32
+      ports:
+        - protocol: TCP
+          port: 80
+---
 # Gateway accepts traffic from the LoadBalancer on port 9000
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

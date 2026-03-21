@@ -27,6 +27,11 @@ spec:
         - name: mcp-server
           image: eu-frankfurt-1.ocir.io/${OCIR_TENANCY}/oci-mcp-security:latest
           imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
           ports:
             - containerPort: 8000
               name: http
