@@ -49,6 +49,8 @@ spec:
               value: "0.0.0.0"
             - name: MCP_GATEWAY_PORT
               value: "9000"
+            - name: FASTMCP_STATELESS_HTTP
+              value: "true"
             - name: OCI_AUTH_METHOD
               value: "resource_principal"
             - name: OCI_REGION
@@ -61,15 +63,13 @@ spec:
               mountPath: /etc/mcp-gateway
               readOnly: true
           livenessProbe:
-            httpGet:
-              path: /health
+            tcpSocket:
               port: 9000
             initialDelaySeconds: 15
             periodSeconds: 30
             timeoutSeconds: 5
           readinessProbe:
-            httpGet:
-              path: /health
+            tcpSocket:
               port: 9000
             initialDelaySeconds: 10
             periodSeconds: 10

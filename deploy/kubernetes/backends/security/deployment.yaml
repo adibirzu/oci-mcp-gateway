@@ -32,11 +32,13 @@ spec:
               name: http
           env:
             - name: MCP_TRANSPORT
-              value: "streamable-http"
+              value: "http"
             - name: MCP_HOST
               value: "0.0.0.0"
             - name: MCP_PORT
               value: "8000"
+            - name: MCP_DISABLE_AUTH
+              value: "true"
             - name: OCI_AUTH_METHOD
               value: "resource_principal"
             - name: OCI_REGION

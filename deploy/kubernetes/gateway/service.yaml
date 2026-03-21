@@ -7,12 +7,10 @@ metadata:
     app: oci-mcp-gateway
     tier: gateway
   annotations:
-    # OCI Flexible Load Balancer annotations
-    oci.oraclecloud.com/load-balancer-type: "lb"
     service.beta.kubernetes.io/oci-load-balancer-shape: "flexible"
     service.beta.kubernetes.io/oci-load-balancer-shape-flex-min: "10"
     service.beta.kubernetes.io/oci-load-balancer-shape-flex-max: "10"
-    service.beta.kubernetes.io/oci-load-balancer-backend-protocol: "HTTP"
+    service.beta.kubernetes.io/oci-load-balancer-subnet1: "${GATEWAY_LB_SUBNET_OCID}"
 spec:
   type: LoadBalancer
   selector:

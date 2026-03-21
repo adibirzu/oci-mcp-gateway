@@ -14,17 +14,13 @@ data:
       "port": 9000,
       "path": "/mcp",
       "log_level": "INFO",
-      "stateless": true,
+      "stateless": false,
       "auth": {
-        "enabled": true,
-        "jwt_public_key_file": "/etc/mcp-gateway/jwt-public-key.pem",
-        "jwt_issuer": "https://idcs-${IDCS_DOMAIN_ID}.identity.oraclecloud.com/oauth2/v1",
-        "jwt_audience": "oci-mcp-gateway",
-        "jwt_algorithms": ["RS256"],
+        "enabled": false,
         "static_tokens": {},
         "required_scopes": [],
         "tool_scopes": {},
-        "cors_origins": ["https://cp.octodemo.cloud", "https://ops.octodemo.cloud"]
+        "cors_origins": ["*"]
       },
       "backends": [
         {

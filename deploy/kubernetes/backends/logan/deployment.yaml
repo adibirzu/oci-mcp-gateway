@@ -42,15 +42,13 @@ spec:
             - name: OCI_REGION
               value: "eu-frankfurt-1"
           livenessProbe:
-            httpGet:
-              path: /health
+            tcpSocket:
               port: 8000
             initialDelaySeconds: 15
             periodSeconds: 30
             timeoutSeconds: 5
           readinessProbe:
-            httpGet:
-              path: /health
+            tcpSocket:
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 10

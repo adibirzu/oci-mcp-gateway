@@ -1,11 +1,11 @@
-# Database Observatory MCP Server
+# Database Observatory MCP Server (FastMCP mode)
 # Source: ~/dev/MCP/mcp-oci-database-observatory
-# Entry: python -m src.main
+# The mcp SDK's FastMCP requires transport_security override for K8s DNS names.
 
 FROM python:3.12-slim AS builder
 RUN pip install --no-cache-dir uv
 WORKDIR /build
-COPY pyproject.toml .
+COPY pyproject.toml README.md ./
 COPY src/ src/
 RUN uv pip install --system --no-cache "."
 
@@ -26,14 +26,20 @@ USER mcp
 ENV PYTHONPATH=/app \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    MCP_TRANSPORT=streamable-http \
-    MCP_HOST=0.0.0.0 \
-    MCP_PORT=8000 \
     OCI_AUTH_METHOD=resource_principal
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -fs http://127.0.0.1:8000/health || exit 1
+    CMD curl -fs -o /dev/null -w '' http://127.0.0.1:8000/mcp || exit 1
 
-ENTRYPOINT ["python", "-m", "src.main"]
+# Disable DNS rebinding protection for K8s service DNS names,
+# then import and run the MCP server with streamable-http transport.
+ENTRYPOINT ["python", "-c", "\
+from mcp.server.transport_security import TransportSecuritySettings;\
+from src.mcp_server.__main__ import mcp;\
+mcp.settings.transport_security = TransportSecuritySettings(enable_dns_rebinding_protection=False);\
+mcp.settings.host = '0.0.0.0';\
+mcp.settings.port = 8000;\
+mcp.run(transport='streamable-http')\
+"]
