@@ -52,7 +52,7 @@ spec:
             - name: FASTMCP_STATELESS_HTTP
               value: "true"
             - name: OCI_AUTH_METHOD
-              value: "resource_principal"
+              value: "instance_principal"
             - name: OCI_REGION
               value: "eu-frankfurt-1"
           volumeMounts:

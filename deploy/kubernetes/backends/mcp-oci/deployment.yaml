@@ -38,7 +38,7 @@ spec:
             - name: FASTMCP_HOST
               value: "0.0.0.0"
             - name: OCI_AUTH_METHOD
-              value: "resource_principal"
+              value: "instance_principal"
             - name: OCI_REGION
               value: "eu-frankfurt-1"
           livenessProbe:
