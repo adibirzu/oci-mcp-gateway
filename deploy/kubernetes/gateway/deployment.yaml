@@ -81,14 +81,19 @@ spec:
             - name: secrets
               mountPath: /etc/mcp-gateway
               readOnly: true
+          # HTTP probes hit the wrapper's dedicated endpoints (served on the
+          # same port as /mcp). /health = liveness (process up); /ready =
+          # readiness (>=1 backend healthy in the registry, else HTTP 503).
           livenessProbe:
-            tcpSocket:
+            httpGet:
+              path: /health
               port: 9000
             initialDelaySeconds: 15
             periodSeconds: 30
             timeoutSeconds: 5
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /ready
               port: 9000
             initialDelaySeconds: 10
             periodSeconds: 10

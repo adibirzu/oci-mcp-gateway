@@ -1,8 +1,11 @@
 """OCI MCP Gateway entry point.
 
-Thin wrapper around mcp-server-oci gateway module. Adds OKE-specific
-health endpoints and optional OTEL observability before delegating
-to the production-grade gateway infrastructure.
+Wraps the ``mcp-server-oci`` gateway engine. Adds:
+
+- OKE-friendly ``/health`` and ``/ready`` HTTP probes on the gateway port.
+- Optional OpenTelemetry export to OCI APM (or any OTLP endpoint).
+
+before delegating to the production-grade gateway infrastructure.
 """
 
 from __future__ import annotations
@@ -16,8 +19,8 @@ log = structlog.get_logger(__name__)
 
 
 def main() -> None:
-    """Load config, optionally init OTEL, then start the gateway."""
-    # Init observability before anything else (if APM domain configured)
+    """Init observability, build the gateway with probes, then serve."""
+    # Init observability before anything else (only if an endpoint is set).
     apm_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
     if apm_endpoint:
         try:
@@ -26,11 +29,13 @@ def main() -> None:
             init_otel()
             log.info("otel_initialized", endpoint=apm_endpoint)
         except ImportError:
-            log.warning("otel_packages_not_installed", hint="pip install oci-mcp-gateway[otel]")
+            log.warning(
+                "otel_packages_not_installed",
+                hint="pip install oci-mcp-gateway[otel]",
+            )
 
-    # Import gateway module (mcp-server-oci dependency)
     try:
-        from mcp_server_oci.gateway.server import run_gateway
+        from oci_mcp_gateway.app import build_gateway, run
     except ImportError:
         log.error(
             "mcp_server_oci_not_installed",
@@ -38,8 +43,8 @@ def main() -> None:
         )
         sys.exit(1)
 
-    log.info("starting_oci_mcp_gateway", version="1.0.0")
-    run_gateway()
+    gateway, config = build_gateway()
+    run(gateway, config)
 
 
 if __name__ == "__main__":

@@ -20,14 +20,14 @@ log = structlog.get_logger(__name__)
 
 def init_otel() -> None:
     """Initialize OTEL tracing and metrics with OCI APM exporter."""
-    from opentelemetry import trace, metrics
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry import metrics, trace
     from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.sdk.metrics import MeterProvider
-    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 
     service_name = os.getenv("OTEL_SERVICE_NAME", "oci-mcp-gateway")
     endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")

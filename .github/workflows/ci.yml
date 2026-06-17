@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-test:
+    name: Lint & unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      # The gateway engine (mcp-server-oci) is not published to PyPI, so we
+      # install only the wrapper's other deps + dev tooling. Engine-dependent
+      # tests (tests/test_app.py) self-skip via pytest.importorskip; the pure
+      # unit tests (tests/test_health.py) always run.
+      - name: Install wrapper (no engine)
+        run: |
+          uv pip install --system \
+            structlog pydantic pydantic-settings httpx \
+            pytest pytest-asyncio pytest-cov ruff
+          uv pip install --system --no-deps -e .
+
+      - name: Ruff lint
+        run: ruff check src tests
+
+      - name: Pytest
+        run: pytest --cov=src/oci_mcp_gateway --cov-report=term-missing
+
+  docker-build-scan:
+    name: Docker build & image scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # The gateway image needs the engine source vendored into the build
+      # context (see Dockerfile header). On CI we only have this repo, so we
+      # build the engine-free layers via a lint Dockerfile target if present,
+      # otherwise we validate the Dockerfile syntax with hadolint and scan the
+      # filesystem for vulnerabilities/secrets with Trivy.
+      - name: Hadolint (Dockerfile lint)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: warning
+
+      - name: Trivy filesystem scan (vulns + secrets + misconfig)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true

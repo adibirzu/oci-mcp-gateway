@@ -7,7 +7,6 @@ readiness probes can hit without MCP session overhead.
 
 from __future__ import annotations
 
-import asyncio
 import time
 from typing import Any
 
