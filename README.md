@@ -219,6 +219,13 @@ counts + latency) appear in the APM dashboard. The data key is injected via
 > `docs/SECURITY.md`.
 
 ```bash
+# 0. Resolve the placeholder identifiers from your local secrets file. The
+#    manifests carry ${TOKENS}; deploy.sh resolves them via envsubst and fails
+#    fast if any required var is unset.
+export OCIR_TENANCY=...            # OCIR tenancy namespace
+export APM_UPLOAD_ENDPOINT=...     # <id>.apm-agt.<region>.oci.oraclecloud.com
+export GATEWAY_LB_SUBNET_OCID=...  # ocid1.subnet.oc1....
+
 # 1. Build & push all images on an x86_64 build VM (ARM Macs must not build
 #    amd64 images locally). Tags with a timestamp + latest.
 ./deploy/scripts/build-all.sh                 # or: build-all.sh gateway oci

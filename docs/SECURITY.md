@@ -11,11 +11,21 @@ This document tracks (1) the **secret/identifier leak remediation plan** and
 
 ---
 
-## 1. Committed identifier leak — remediation plan (NOT yet executed)
+## 1. Committed identifier leak — remediation (EXECUTED)
 
-Real tenancy identifiers are present in committed files. Per the repo's
-redaction convention, these must be replaced with `<PLACEHOLDER>` tokens that
-resolve via a local-only secrets file, and purged from history.
+Real tenancy identifiers were present in committed files. They have now been
+purged from **all** local history via `git filter-repo --replace-text`,
+replaced with `${PLACEHOLDER}` tokens that resolve via a local-only secrets
+file + `envsubst` at deploy time (see `deploy/scripts/deploy.sh`).
+
+A pre-rewrite backup bundle of every ref is kept locally
+(`~/oci-mcp-gateway-prerewrite-*.bundle`).
+
+> **Remaining manual step:** force-push the rewritten history to the remote
+> (`git push --force --all` + `--tags`) to purge the values from GitHub. GitHub
+> may still expose old commits via cached views, open PRs, or forks — delete/
+> recreate those or contact support if a hard purge is required. None of the
+> leaked values are live credentials, so no rotation is needed.
 
 ### 1.1 Inventory
 
@@ -72,7 +82,7 @@ envsubst < deploy/kubernetes/gateway/deployment.yaml | kubectl apply -f -
 ### 1.3 Pre-commit gate (add to `.git/hooks/pre-commit`)
 
 ```bash
-git diff --cached -U0 | grep -nE 'ocid1\.[a-z]+\.oc1|${OCIR_TENANCY}|idcs-[0-9a-f]{32}|apm-agt' \
+git diff --cached -U0 | grep -nE 'ocid1\.[a-z]+\.oc1|ocir\.io/[a-z0-9]{10,}|idcs-[0-9a-f]{32}|apm-agt' \
   && echo "ABORT: real OCI identifier in staged diff" && exit 1
 exit 0
 ```

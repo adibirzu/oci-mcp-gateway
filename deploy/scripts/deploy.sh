@@ -12,6 +12,42 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 K8S_DIR="$(cd "$SCRIPT_DIR/../kubernetes" && pwd)"
 COMPONENT="${1:-all}"
 
+# Manifests use ${PLACEHOLDER} tokens instead of real tenancy identifiers
+# (see docs/SECURITY.md). Resolve them at apply time via envsubst, restricted
+# to this explicit allowlist so no other shell-looking text is touched.
+SUBST_VARS='${OCIR_TENANCY} ${APM_UPLOAD_ENDPOINT} ${GATEWAY_LB_SUBNET_OCID} ${IDCS_DOMAIN_ID}'
+
+require_vars() {
+  local missing=()
+  local v
+  for v in "$@"; do [[ -n "${!v:-}" ]] || missing+=("$v"); done
+  if (( ${#missing[@]} )); then
+    echo "ERROR: required env vars unset: ${missing[*]}" >&2
+    echo "Source them from your local secrets file before deploying." >&2
+    exit 1
+  fi
+}
+
+# Apply a file or every *.yaml in a directory, resolving placeholders first.
+apply_path() {
+  local target="$1" f
+  if [[ -d "$target" ]]; then
+    for f in "$target"/*.yaml; do
+      [[ -e "$f" ]] || continue
+      envsubst "$SUBST_VARS" < "$f" | kubectl apply -f -
+    done
+  else
+    envsubst "$SUBST_VARS" < "$target" | kubectl apply -f -
+  fi
+}
+
+# Fail fast if the placeholders the chosen component needs are unset.
+case "$COMPONENT" in
+  all)      require_vars OCIR_TENANCY APM_UPLOAD_ENDPOINT GATEWAY_LB_SUBNET_OCID ;;
+  backends) require_vars OCIR_TENANCY ;;
+  gateway)  require_vars OCIR_TENANCY APM_UPLOAD_ENDPOINT GATEWAY_LB_SUBNET_OCID ;;
+esac
+
 echo "=== OCI MCP Gateway — Deploy to OKE ==="
 echo "Component: $COMPONENT"
 echo ""
@@ -21,7 +57,7 @@ kubectl create ns oci-mcp --dry-run=client -o yaml | kubectl apply -f -
 
 if [[ "$COMPONENT" == "all" || "$COMPONENT" == "shared" ]]; then
   echo "--- Applying shared resources ---"
-  kubectl apply -f "$K8S_DIR/shared/"
+  apply_path "$K8S_DIR/shared"
 fi
 
 if [[ "$COMPONENT" == "all" || "$COMPONENT" == "backends" ]]; then
@@ -29,7 +65,7 @@ if [[ "$COMPONENT" == "all" || "$COMPONENT" == "backends" ]]; then
   for backend_dir in "$K8S_DIR"/backends/*/; do
     backend_name=$(basename "$backend_dir")
     echo "  Deploying $backend_name..."
-    kubectl apply -f "$backend_dir"
+    apply_path "$backend_dir"
   done
 
   echo "  Waiting for backends..."
@@ -43,7 +79,7 @@ fi
 
 if [[ "$COMPONENT" == "all" || "$COMPONENT" == "gateway" ]]; then
   echo "--- Deploying gateway ---"
-  kubectl apply -f "$K8S_DIR/gateway/"
+  apply_path "$K8S_DIR/gateway"
   kubectl rollout status -n oci-mcp deployment/oci-mcp-gateway --timeout=120s
 fi
 
