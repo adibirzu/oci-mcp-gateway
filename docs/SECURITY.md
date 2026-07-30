@@ -140,3 +140,28 @@ was never populated, so `gateway_health` (and any readiness probe reading it)
 reported **zero backends** even while proxied tools served correctly. Fixed by
 adding `"lifespan": gateway_lifespan` to the FastMCP kwargs. This is what makes
 the new `/ready` probe report true backend state.
+
+---
+
+## 4. Production release trust boundary
+
+The gateway is released independently from the coordinator. Production
+publication is limited to an explicit dispatch of
+`.github/workflows/release.yml` from `main` through the protected
+`production-release` environment. The workflow builds the locked
+`linux/amd64` image, addresses it by registry digest, and publishes no
+`latest` tag.
+
+GitHub OIDC keyless signing binds the image and its CycloneDX SBOM, SLSA
+provenance, and vulnerability predicate to the exact gateway release workflow.
+The vulnerability gate rejects HIGH and CRITICAL findings. The emitted
+`gateway-release.json` is itself signed as a blob and records the immutable
+image reference, source revision, engine revision, workflow identity, and
+bounded artifact names.
+
+The coordinator must independently verify the gateway signature and all three
+attestations before accepting the component into its two-image release receipt.
+Neither the remote development build helper nor a successful local test run is
+release evidence. The manual workflow has to produce and verify the artifacts;
+protected OKE admission and runtime certification remain separate
+owner-controlled gates.

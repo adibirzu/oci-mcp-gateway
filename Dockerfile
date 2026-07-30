@@ -1,58 +1,60 @@
-# Gateway image — thin wrapper around mcp-server-oci gateway module
-# Build on x86_64 VM (never locally on ARM).
-# Requires mcp-server-oci source at /tmp/mcp/mcp-oci/ on the build VM.
-#
-# Build context: /tmp/mcp/oci-mcp-gateway/
-# Pre-step: copy mcp-oci source into build context:
-#   cp -r /tmp/mcp/mcp-oci /tmp/mcp/oci-mcp-gateway/_mcp-oci
+# syntax=docker/dockerfile:1.7
 
-# ── Stage 1: Builder ──────────────────────────────────────────────
-FROM python:3.12-slim AS builder
+# Reproducible linux/amd64 gateway image. The lock file pins the gateway engine
+# to an exact Git revision and resolves every Python dependency.
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de AS builder
 
-RUN pip install --no-cache-dir uv
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    UV_PROJECT_ENVIRONMENT=/opt/venv
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m pip install --no-cache-dir "uv==0.11.21"
 
 WORKDIR /build
 
-# Install mcp-server-oci (local source) first
-COPY _mcp-oci/pyproject.toml _mcp-oci/README.md _mcp-oci/
-COPY _mcp-oci/src/ _mcp-oci/src/
-RUN uv pip install --system --no-cache "./_mcp-oci"
-
-# Install this gateway wrapper + OTEL deps
-COPY pyproject.toml .
+COPY uv.lock pyproject.toml README.md ./
 COPY src/ src/
-RUN uv pip install --system --no-cache ".[otel]"
 
-# ── Stage 2: Runtime ──────────────────────────────────────────────
-FROM python:3.12-slim AS runtime
+RUN uv sync --frozen --no-dev --extra otel --no-editable \
+    && /opt/venv/bin/python -c \
+      "import mcp_server_oci, oci_mcp_gateway; print('gateway runtime imports verified')"
 
-RUN groupadd -g 1000 mcp && useradd -u 1000 -g mcp -s /bin/sh mcp
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de AS runtime
 
-# Minimal runtime deps
-RUN apt-get update && apt-get install -y --no-install-recommends curl && \
-    rm -rf /var/lib/apt/lists/*
-
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
-
-WORKDIR /app
-COPY src/ src/
-COPY config/gateway.json config/gateway.json
-
-RUN chown -R mcp:mcp /app
-
-USER mcp
-
-ENV PYTHONPATH=/app/src \
+ENV PATH=/opt/venv/bin:/usr/local/bin:/usr/bin:/bin \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     MCP_GATEWAY_CONFIG=/app/config/gateway.json \
     MCP_GATEWAY_HOST=0.0.0.0 \
     MCP_GATEWAY_PORT=9000
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 gateway \
+    && useradd \
+      --uid 10001 \
+      --gid 10001 \
+      --no-create-home \
+      --home-dir /nonexistent \
+      --shell /usr/sbin/nologin \
+      gateway
+
+COPY --from=builder /opt/venv /opt/venv
+
+WORKDIR /app
+COPY --chown=10001:10001 config/gateway.json config/gateway.json
+
+USER 10001:10001
+
 EXPOSE 9000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -fs -o /dev/null -w '' http://127.0.0.1:9000/mcp || exit 1
+    CMD curl --fail --silent --show-error --output /dev/null \
+      http://127.0.0.1:9000/health || exit 1
 
 ENTRYPOINT ["python", "-m", "oci_mcp_gateway"]

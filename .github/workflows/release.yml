@@ -1,0 +1,274 @@
+name: Release Gateway
+
+# TEMPORARILY MANUAL-ONLY while the GitHub account billing gate rejects jobs
+# before checkout. Configure the production-release environment before use.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-gateway-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish signed gateway
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production-release
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    env:
+      IMAGE_REPOSITORY: ghcr.io/${{ github.repository_owner }}/mcp-oci-gateway
+      ENGINE_REVISION: 815c5d057dc87d8babcc7839c35ccec83435ae13
+      TRIVY_IMAGE: ghcr.io/aquasecurity/trivy:0.72.0@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
+      SYFT_IMAGE: docker.io/anchore/syft:v1.49.0@sha256:13b53ebabe3d215268c90cf8fb9b875f0183908245f376fd4b3a2cb69d21d484
+    steps:
+      - name: Check out exact gateway source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@0c5e2b8115b80b4c7c5ddf6ffdd634974642d182 # v5.4.1
+        with:
+          version: "0.11.21"
+          enable-cache: false
+
+      - name: Validate locked engine provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F "${ENGINE_REVISION}" pyproject.toml
+          grep -F "${ENGINE_REVISION}" uv.lock
+          uv lock --check
+
+      - name: Authenticate to GHCR
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Install verified Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Build and push gateway
+        id: push
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.IMAGE_REPOSITORY }}:${{ github.sha }}
+          provenance: false
+          sbom: false
+
+      - name: Resolve exact gateway image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly digest='${{ steps.push.outputs.digest }}'
+          if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Gateway registry digest is invalid" >&2
+            exit 2
+          fi
+          mkdir -m 700 release
+          echo "reference=${IMAGE_REPOSITORY}@${digest}" >> "${GITHUB_OUTPUT}"
+
+      - name: Export exact image archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull '${{ steps.image.outputs.reference }}'
+          docker save \
+            --output release/gateway-image.tar \
+            '${{ steps.image.outputs.reference }}'
+
+      - name: Generate CycloneDX SBOM
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --network=none \
+            --read-only --cap-drop=ALL --security-opt=no-new-privileges \
+            --user "$(id -u):$(id -g)" \
+            --mount type=bind,src="${PWD}/release",dst=/work \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777 \
+            "${SYFT_IMAGE}" \
+            scan docker-archive:/work/gateway-image.tar \
+            -o cyclonedx-json=/work/gateway-sbom.cdx.json
+
+      - name: Enforce vulnerability policy and build signed predicate
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --read-only --cap-drop=ALL --security-opt=no-new-privileges \
+            --user "$(id -u):$(id -g)" \
+            --entrypoint /bin/sh \
+            --mount type=bind,src="${PWD}/release",dst=/work \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=768m,mode=1777 \
+            "${TRIVY_IMAGE}" -euc '
+              trivy image \
+                --input /work/gateway-image.tar \
+                --cache-dir /tmp/trivy-cache \
+                --format json \
+                --output /work/gateway-vulnerability-report.json \
+                --scanners vuln \
+                --severity HIGH,CRITICAL \
+                --ignore-unfixed=false \
+                --disable-telemetry \
+                --exit-code 1
+              trivy image \
+                --input /work/gateway-image.tar \
+                --cache-dir /tmp/trivy-cache \
+                --format cosign-vuln \
+                --output /work/gateway-vulnerability-attestation.json \
+                --scanners vuln \
+                --skip-db-update \
+                --offline-scan \
+                --disable-telemetry
+            '
+
+      - name: Create bounded SLSA provenance predicate
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg repository "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --arg revision "${GITHUB_SHA}" \
+            --arg engine_revision "${ENGINE_REVISION}" \
+            --arg workflow "${GITHUB_WORKFLOW_REF}" \
+            '{
+              buildDefinition: {
+                buildType: "https://github.com/Attestations/GitHubActionsWorkflow@v1",
+                externalParameters: {
+                  repository: $repository,
+                  revision: $revision,
+                  engine_revision: $engine_revision,
+                  workflow: $workflow
+                },
+                internalParameters: {},
+                resolvedDependencies: [
+                  {
+                    uri: "git+https://github.com/adibirzu/mcp-oci.git",
+                    digest: {gitCommit: $engine_revision}
+                  }
+                ]
+              },
+              runDetails: {
+                builder: {id: $workflow},
+                metadata: {invocationId: env.GITHUB_RUN_ID}
+              }
+            }' > release/gateway-provenance.json
+
+      - name: Keylessly sign and attest gateway
+        shell: bash
+        env:
+          GATEWAY_IMAGE: ${{ steps.image.outputs.reference }}
+        run: |
+          set -euo pipefail
+          cosign sign --yes "${GATEWAY_IMAGE}"
+          cosign attest --yes --type cyclonedx \
+            --predicate release/gateway-sbom.cdx.json \
+            "${GATEWAY_IMAGE}"
+          cosign attest --yes --type slsaprovenance \
+            --predicate release/gateway-provenance.json \
+            "${GATEWAY_IMAGE}"
+          cosign attest --yes --type vuln \
+            --predicate release/gateway-vulnerability-attestation.json \
+            "${GATEWAY_IMAGE}"
+
+      - name: Verify published gateway evidence
+        shell: bash
+        env:
+          GATEWAY_IMAGE: ${{ steps.image.outputs.reference }}
+          GATEWAY_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/release.yml@refs/heads/main
+        run: |
+          set -euo pipefail
+          readonly issuer="https://token.actions.githubusercontent.com"
+          cosign verify \
+            --certificate-identity "${GATEWAY_IDENTITY}" \
+            --certificate-oidc-issuer "${issuer}" \
+            --output-file release/gateway-signature.json \
+            "${GATEWAY_IMAGE}"
+          for predicate_type in cyclonedx slsaprovenance vuln; do
+            cosign verify-attestation \
+              --certificate-identity "${GATEWAY_IDENTITY}" \
+              --certificate-oidc-issuer "${issuer}" \
+              --type "${predicate_type}" \
+              --output-file "release/gateway-${predicate_type}-verification.json" \
+              "${GATEWAY_IMAGE}"
+          done
+
+      - name: Build and sign public gateway receipt
+        shell: bash
+        env:
+          GATEWAY_IMAGE: ${{ steps.image.outputs.reference }}
+        run: |
+          set -euo pipefail
+          sbom_sha256="$(sha256sum release/gateway-sbom.cdx.json | cut -d' ' -f1)"
+          provenance_sha256="$(sha256sum release/gateway-provenance.json | cut -d' ' -f1)"
+          vulnerability_sha256="$(sha256sum release/gateway-vulnerability-report.json | cut -d' ' -f1)"
+          signature_sha256="$(sha256sum release/gateway-signature.json | cut -d' ' -f1)"
+          jq -n \
+            --arg image "${GATEWAY_IMAGE}" \
+            --arg git_sha "${GITHUB_SHA}" \
+            --arg engine_revision "${ENGINE_REVISION}" \
+            --arg sbom_sha256 "${sbom_sha256}" \
+            --arg provenance_sha256 "${provenance_sha256}" \
+            --arg vulnerability_sha256 "${vulnerability_sha256}" \
+            --arg signature_sha256 "${signature_sha256}" \
+            '{
+              schema_version: "1.0",
+              component: "gateway",
+              image: $image,
+              git_sha: $git_sha,
+              engine_revision: $engine_revision,
+              signature_verification_sha256: $signature_sha256,
+              sbom_sha256: $sbom_sha256,
+              provenance_sha256: $provenance_sha256,
+              vulnerability_report_sha256: $vulnerability_sha256,
+              critical_vulnerabilities: 0,
+              high_vulnerabilities: 0
+            }' > release/gateway-release.json
+          sha256sum release/gateway-release.json \
+            | cut -d' ' -f1 > release/gateway-release.sha256
+          cosign sign-blob --yes \
+            --bundle release/gateway-release.sigstore.json \
+            release/gateway-release.json
+          cosign verify-blob \
+            --bundle release/gateway-release.sigstore.json \
+            --certificate-identity \
+              "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/heads/main" \
+            --certificate-oidc-issuer \
+              "https://token.actions.githubusercontent.com" \
+            release/gateway-release.json
+          rm -f release/gateway-image.tar
+
+      - name: Retain gateway release evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: gateway-release-${{ github.sha }}
+          path: |
+            release/gateway-release.json
+            release/gateway-release.sha256
+            release/gateway-release.sigstore.json
+            release/gateway-signature.json
+            release/gateway-*-verification.json
+            release/gateway-sbom.cdx.json
+            release/gateway-provenance.json
+            release/gateway-vulnerability-attestation.json
+            release/gateway-vulnerability-report.json
+          if-no-files-found: error
+          retention-days: 30

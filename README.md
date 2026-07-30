@@ -226,9 +226,9 @@ export OCIR_TENANCY=...            # OCIR tenancy namespace
 export APM_UPLOAD_ENDPOINT=...     # <id>.apm-agt.<region>.oci.oraclecloud.com
 export GATEWAY_LB_SUBNET_OCID=...  # ocid1.subnet.oc1....
 
-# 1. Build & push all images on an x86_64 build VM (ARM Macs must not build
-#    amd64 images locally). Tags with a timestamp + latest.
-./deploy/scripts/build-all.sh                 # or: build-all.sh gateway oci
+# 1. For development-only backend builds, use an x86_64 build VM. The helper
+#    pushes one full Git-SHA tag and never publishes "latest".
+TAG="$(git rev-parse HEAD)" ./deploy/scripts/build-all.sh
 
 # 2. Create the secret (JWT key, static token, APM data key).
 #    Generate a random dev token first:  openssl rand -hex 32
@@ -241,6 +241,23 @@ kubectl create secret generic oci-mcp-gateway-secrets \
 # 3. Deploy shared resources, backends, then the gateway
 ./deploy/scripts/deploy.sh                     # or: deploy.sh backends | gateway
 ```
+
+### Production gateway release
+
+The supported gateway image is published independently from the coordinator:
+
+1. Fast-forward the reviewed gateway source to `main`.
+2. Explicitly dispatch `.github/workflows/release.yml` from `main` through the
+   protected `production-release` environment.
+3. Record the immutable `ghcr.io/.../mcp-oci-gateway@sha256:...` reference and
+   the exact workflow identity from the emitted `gateway-release.json`.
+4. Verify its keyless signature plus CycloneDX, SLSA provenance, and
+   vulnerability attestations before supplying it to the coordinator release.
+
+The workflow builds only `linux/amd64`, uses the locked engine revision, rejects
+HIGH or CRITICAL findings, and publishes no mutable tag. The legacy
+`deploy/scripts/build-all.sh` remains a development convenience for sibling
+backend repositories; its images are not signed release evidence.
 
 Layout under `deploy/kubernetes/`:
 

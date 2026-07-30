@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build all MCP server images on the control-plane VM and push to OCIR.
+# Legacy development helper for building MCP images on the control-plane VM.
+# Production gateway releases are published only by the manual signed workflow.
 # ARM Macs must NOT build x86_64 images locally — always use the remote VM.
 #
 # Usage:
@@ -9,12 +10,18 @@
 
 set -euo pipefail
 
-OCIR="eu-frankfurt-1.ocir.io/${OCIR_TENANCY}"
-TAG=$(date +%Y%m%d%H%M%S)
 BUILD_VM="${BUILD_VM:-control-plane-oci}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 MCP_ROOT="$(cd "$PROJECT_ROOT/.." && pwd)"
+: "${OCIR_TENANCY:?Set OCIR_TENANCY before invoking this development helper}"
+OCIR="eu-frankfurt-1.ocir.io/${OCIR_TENANCY}"
+TAG="${TAG:-$(git -C "$PROJECT_ROOT" rev-parse HEAD)}"
+
+if [[ ! "$TAG" =~ ^[a-f0-9]{40}$ ]]; then
+  echo "ERROR: TAG must be a full lowercase 40-character Git commit SHA"
+  exit 1
+fi
 
 # Image name → local source directory + Dockerfile
 declare -A SOURCES=(
@@ -85,15 +92,13 @@ for name in "${TARGETS[@]}"; do
     dockerfile="Dockerfile.gateway"
   fi
 
-  # Build and push on the VM
+  # Build and push one immutable development tag on the VM.
   ssh "$BUILD_VM" bash -c "'
     cd /tmp/mcp/$name
     docker build -f $dockerfile \
       -t $OCIR/$name:$TAG \
-      -t $OCIR/$name:latest \
       . && \
-    docker push $OCIR/$name:$TAG && \
-    docker push $OCIR/$name:latest
+    docker push $OCIR/$name:$TAG
   '"
 
   echo "  Pushed: $OCIR/$name:$TAG"
